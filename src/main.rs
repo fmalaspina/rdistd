@@ -1,8 +1,9 @@
+use execute::{shell, Execute};
 use serde::{Deserialize, Serialize};
 use std::env;
 use std::io::{Read, Write};
 use std::net::{TcpListener, TcpStream};
-use std::process::{Command as ProcessCommand, Stdio};
+use std::process::Stdio;
 #[derive(Serialize, Deserialize, Debug)]
 enum Command {
     Copy { file_path: String },
@@ -47,28 +48,19 @@ fn handle_client(mut stream: TcpStream) {
         }
 
         Command::Run { command } => {
-            let mut first_command = ProcessCommand::new(&command);
+            let mut first_command = shell(&command);
 
             first_command.stdout(Stdio::piped());
             first_command.stderr(Stdio::piped());
 
-            let output = first_command.output().unwrap();
-
-            if let Some(exit_code) = output.status.code() {
-                if exit_code == 0 {
-                    println!("Ok.");
-                } else {
-                    eprintln!("Failed.");
-                }
-            } else {
-                eprintln!("Interrupted!");
-            }
+            let output = first_command.execute_output().unwrap();
 
             format!(
-                "{} executed \n Standard output: \n {} \n Standard error: {} \n",
+                "Command: {} (executed)\nStandard output:\n{}\nStandard error:\n{}\nExit code:{}\n",
                 command,
                 String::from_utf8(output.stdout).unwrap(),
-                String::from_utf8(output.stderr).unwrap()
+                String::from_utf8(output.stderr).unwrap(),
+                output.status.code().unwrap()
             )
         }
     };
