@@ -6,12 +6,12 @@ use std::net::{TcpListener, TcpStream};
 use std::process::Stdio;
 #[derive(Serialize, Deserialize, Debug)]
 enum Command {
-    Copy { file_path: String },
+    Copy { file_path: String, data: Vec<u8> },
     Run { command: String },
+    Rollback { file_path: String },
 }
 #[derive(Serialize, Deserialize, Debug)]
 struct Message {
-    data: Vec<u8>,
     command: Command,
 }
 
@@ -29,21 +29,32 @@ fn read_exact(stream: &mut TcpStream, buffer: &mut [u8]) {
 fn handle_client(mut stream: TcpStream) {
     let mut buffer = [0u8; 4]; // Fixed-length header size
     read_exact(&mut stream, &mut buffer);
-
     let message_len = u32::from_be_bytes(buffer);
     let mut message_buffer = vec![0u8; message_len as usize];
     read_exact(&mut stream, &mut message_buffer);
-
     let message: Message = bincode::deserialize(&message_buffer).unwrap();
 
     // println!("{:?}", message);
     let resp = match message.command {
-        Command::Copy { file_path } => {
-            std::fs::write(&file_path, &message.data).expect("Failed to save file");
+        Command::Copy { file_path, data } => {
+            // Generate a unique filename for the previous version
+            let previous_version_filename = format!("{}.prev", &file_path);
+
+            // Check if the file already exists
+            if std::fs::metadata(&file_path).is_ok() {
+                // Create a backup by renaming the existing file
+                std::fs::rename(&file_path, &previous_version_filename)
+                    .expect("Failed to create backup file");
+            }
+
+            std::fs::write(&file_path, &data).expect("Failed to save file");
+            // Store the file path in history
+
             format!(
-                "File with a {} bytes received and saved in path {}",
-                message.data.len(),
-                file_path
+                "File with {} bytes received and saved at path {}. Previous version stored at {}",
+                data.len(),
+                file_path,
+                previous_version_filename
             )
         }
 
@@ -62,6 +73,41 @@ fn handle_client(mut stream: TcpStream) {
                 String::from_utf8(output.stderr).unwrap(),
                 output.status.code().unwrap()
             )
+        }
+        Command::Rollback { file_path } => {
+            // Extract the original file path
+            // Iterate over files in the current directory
+            if let Ok(entries) = std::fs::read_dir(file_path) {
+                for entry in entries {
+                    if let Ok(entry) = entry {
+                        if let Some(file_name) = entry.file_name().to_str() {
+                            // Check if the file has a .prev suffix
+                            if file_name.ends_with(".prev") {
+                                // Extract the original file path
+                                let original_file_path = file_name.trim_end_matches(".prev");
+
+                                // Check if the original file exists
+                                if std::fs::metadata(&original_file_path).is_ok() {
+                                    // Restore the previous version by renaming the backup file
+                                    std::fs::rename(&file_name, &original_file_path)
+                                        .expect("Failed to restore previous version");
+
+                                    println!("Rollback successful: Restored previous version of file at path {}", original_file_path);
+                                } else {
+                                    println!(
+                                        "Rollback failed: Original file not found for path {}",
+                                        original_file_path
+                                    );
+                                }
+                            }
+                        }
+                    }
+                }
+
+                "Rollback process completed".to_owned()
+            } else {
+                "Rollback failed: Error reading directory".to_owned()
+            }
         }
     };
 
