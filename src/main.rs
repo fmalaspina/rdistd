@@ -1,17 +1,17 @@
 use serde::{Deserialize, Serialize};
+use std::env;
 use std::io::{Read, Write};
 use std::net::{TcpListener, TcpStream};
-
-#[derive(Serialize, Deserialize, Debug)]
-struct Message {
-    data: Vec<u8>,
-    command: Command,
-}
-
+use std::process::{Command as ProcessCommand, Stdio};
 #[derive(Serialize, Deserialize, Debug)]
 enum Command {
     Copy { file_path: String },
     Run { command: String },
+}
+#[derive(Serialize, Deserialize, Debug)]
+struct Message {
+    data: Vec<u8>,
+    command: Command,
 }
 
 fn read_exact(stream: &mut TcpStream, buffer: &mut [u8]) {
@@ -36,22 +36,45 @@ fn handle_client(mut stream: TcpStream) {
     let message: Message = bincode::deserialize(&message_buffer).unwrap();
 
     // println!("{:?}", message);
-
-    match message.command {
+    let resp = match message.command {
         Command::Copy { file_path } => {
             std::fs::write(&file_path, &message.data).expect("Failed to save file");
-            println!("File content length received: {}", &message.data.len());
+            format!(
+                "File with a {} bytes received and saved in path {}",
+                message.data.len(),
+                file_path
+            )
         }
 
         Command::Run { command } => {
-            // Handle the "Run" command
-            // Add your logic to execute the command here
-            println!("Command executed: {}", command);
+            let mut first_command = ProcessCommand::new(&command);
+
+            first_command.stdout(Stdio::piped());
+            first_command.stderr(Stdio::piped());
+
+            let output = first_command.output().unwrap();
+
+            if let Some(exit_code) = output.status.code() {
+                if exit_code == 0 {
+                    println!("Ok.");
+                } else {
+                    eprintln!("Failed.");
+                }
+            } else {
+                eprintln!("Interrupted!");
+            }
+
+            format!(
+                "{} executed \n Standard output: \n {} \n Standard error: {} \n",
+                command,
+                String::from_utf8(output.stdout).unwrap(),
+                String::from_utf8(output.stderr).unwrap()
+            )
         }
-    }
+    };
 
     // Send a response back to the client if needed
-    let response = b"Message received."; // Replace with your own response
+    let response = resp.as_bytes(); // Replace with your own response
 
     let response_len = (response.len() as u32).to_be_bytes();
     stream
@@ -64,14 +87,21 @@ fn handle_client(mut stream: TcpStream) {
 }
 
 fn main() {
-    let listener = TcpListener::bind("0.0.0.0:8080").expect("Failed to bind");
-    println!("Server running on port 8080");
-    for stream in listener.incoming() {
-        match stream {
-            Ok(stream) => {
-                std::thread::spawn(move || handle_client(stream));
+    let args: Vec<String> = env::args().collect();
+
+    if args.len() > 1 {
+        let listener =
+            TcpListener::bind(format!("{}:{}", "0.0.0.0", args[1])).expect("Failed to bind");
+        println!("Server running on port {}", args[1]);
+        for stream in listener.incoming() {
+            match stream {
+                Ok(stream) => {
+                    std::thread::spawn(move || handle_client(stream));
+                }
+                Err(e) => eprintln!("Error: {}", e),
             }
-            Err(e) => eprintln!("Error: {}", e),
         }
+    } else {
+        println!("No port provided.")
     }
 }
