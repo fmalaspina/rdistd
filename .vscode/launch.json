@@ -1,24 +1,49 @@
 {
-  "version": "0.2.0",
-  "configurations": [
-    {
-      "name": "C/C++ Runner: Debug Session",
-      "type": "cppdbg",
-      "request": "launch",
-      "args": [],
-      "stopAtEntry": false,
-      "externalConsole": true,
-      "cwd": "c:/Users/f_mal/projects/rust/distributor/rdistd",
-      "program": "c:/Users/f_mal/projects/rust/distributor/rdistd/build/Debug/outDebug",
-      "MIMode": "gdb",
-      "miDebuggerPath": "gdb",
-      "setupCommands": [
+    // Use IntelliSense to learn about possible attributes.
+    // Hover to view descriptions of existing attributes.
+    // For more information, visit: https://go.microsoft.com/fwlink/?linkid=830387
+    "version": "0.2.0",
+    "configurations": [
         {
-          "description": "Enable pretty-printing for gdb",
-          "text": "-enable-pretty-printing",
-          "ignoreFailures": true
+            "type": "lldb",
+            "request": "launch",
+            "name": "Debug executable 'rdistd'",
+            "cargo": {
+                "args": [
+                    "build",
+                    "--bin=rdistd",
+                    "--package=rdistd"
+                ],
+                "filter": {
+                    "name": "rdistd",
+                    "kind": "bin"
+                }
+            },
+            "args": [
+                "7000"
+            ],
+            "cwd": "${workspaceFolder}"
+        },
+        {
+            "type": "lldb",
+            "request": "launch",
+            "name": "Debug unit tests in executable 'rdistd'",
+            "cargo": {
+                "args": [
+                    "test",
+                    "--no-run",
+                    "--bin=rdistd",
+                    "--package=rdistd"
+                ],
+                "filter": {
+                    "name": "rdistd",
+                    "kind": "bin"
+                }
+            },
+            "args": [
+                "7000"
+            ],
+            "cwd": "${workspaceFolder}"
         }
-      ]
-    }
-  ]
+    ]
 }
